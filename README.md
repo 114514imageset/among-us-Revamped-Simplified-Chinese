@@ -1,0 +1,185 @@
+<h1 align="center">Welcome to Among Us Revamped!</h1>
+<br>
+
+</p>
+<p align="center">
+  <a href="https://discord.gg/83Zhzhyhya" target="_blank">
+    <img src="https://img.shields.io/badge/Discord%20-%231DA1F2.svg?&style=for-the-badge&logo=discord&logoColor=white&color=5662f6"/>
+  </a>
+  <a href="https://ko-fi.com/apemv">
+    <img src="https://img.shields.io/badge/Donate%20on-Ko--fi-ff5f5f?style=for-the-badge&logo=ko-fi&logoColor=white">
+  </a>
+</p>
+
+<p align="center">
+  <a href="https://github.com/ApeMV/AmongUsRevamped/releases">
+    <img src="https://img.shields.io/github/downloads/ApeMV/AmongUsRevamped/total?style=for-the-badge&color=red"/>
+  </a>
+  <a href="https://github.com/ApeMV/AmongUsRevamped/releases/latest">
+    <img src="https://img.shields.io/github/downloads/ApeMV/AmongUsRevamped/latest/total?style=for-the-badge"/>
+  </a>
+</p>
+
+> ## 🇨🇳 简体中文版 / Simplified Chinese Edition
+>
+> 本仓库是 [ApeMV/AmongUsRevamped](https://github.com/ApeMV/AmongUsRevamped) 的**非官方分支**，由 **114514imageset** 维护（修改日期：2026-11-19）。
+>
+> - 仅修改 `Resources/Language/SimplifiedChinese.json`（补全缺失键、修正漏翻与术语），**未改动任何 C# 功能代码**。
+> - 与原作者 ApeMV 无关，也不代表原作者认可本分支。
+> - 仍以 GNU GPLv3 发布；完整源码随 Releases 一同提供。
+>
+> 安装方式与原版一致；语言在 `BepInEx/plugins/AUR-DATA/Language/YourLanguage.txt` 中填写 `SimplifiedChinese`。
+
+# 💡 How To Install:
+- <b>If you have BepInEx, download AUR.dll in releases and move it into Among Us → BepinEx → Plugins</b>
+- <b> If you don't have BepInEx:</b>
+- Download the latest .zip file in the releases tab
+- Extract the contents of the zip into your Among Us folder
+- Paste the copied files directly into your Among Us game folder
+- Shown below are the folder locations:
+   - **Steam:** Right-click Among Us in your `Library` → `Manage` → `Browse local files`
+   - **Epic Launcher:** Right-click Among Us in your Library → `Manage` → Click the folder icon in the Installation box
+   - **Itch.io:** Open the Itch.io app → Right-click Among Us in your Library → `Manage` → `Open folder in Explorer`
+   - **Xbox App:** Open the Xbox app → Right-click Among Us in your library → `Manage` → `Files` → `Browse...`
+   - **Microsoft Store:** Check [this support article](https://answers.microsoft.com/en-us/xbox/forum/all/where-can-i-find-the-gamefiles-of-a-game/5cb9a0c3-7948-4316-abc5-f27d1767b932) on how to find and access your Among Us folder.
+ - Your game folder should look similar to this after installation:
+<img src="https://github.com/astra1dev/AUnlocker/assets/90265231/14226f03-a003-4efc-b27b-6df53fb394d6" width=410 height=240>****
+‎ 
+
+# 🎮 Features (v2.3.0):
+
+## <b>♠️ Client Side settings:</b>
+- Toggle Game Master (Spectator)
+- Toggle Show FPS
+- Toggle Dark Theme
+- Toggle Lobby Music
+- Toggle Info When Dead
+- Toggle Command Helper
+- Toggle Chat Modifications
+- Toggle Lobby Info
+## <b>⚙️ Technical settings:</b>
+- Advanced AFK Detection system
+- Kick/Ban players under/above a certain level
+- Kick/Ban invalid (Empty) Friendcodes
+- Kick/Ban players who say "start"
+- Banlist system
+- Denyword and Denyname system
+- Advanced Moderator system
+- To add Admins/Moderators/VIP's, type the user's Friendcode in the designated files located in AUR-DATA
+- Enable No Game End
+- Custom starting countdown
+## <b>♻️ Automation settings:</b>
+- Full Autohost and Rehost support
+- Automatically rejoin lobby
+- Automatically send winner info
+- Automatically Send Map Votes
+- Enable (configurable) Welcome Messages from Templates.txt
+## <b>🔧 Gameplay Settings:</b>
+- Change sabotage cooldown and durations
+- Dead impostors can sabotage
+- Disable critical sabotages (individual)
+- Disable door sabotages
+- Disable meeting calls first 30s
+- Disable devices (per map, individual)
+- Override decontamination time (per map)
+- Disable spore triggers on The Fungle
+- % Tasks completed for Crewmates to win
+- Enable/Disable any task
+- All players have same tasks
+- Shield player who died first
+- Hide and Seek: Custom Seeker count
+## <b>🏆 Custom Gamemodes:</b>
+- 0Kcd -> Set Kill Cooldown to 0.0
+- Shift and Seek
+- Poof and Seek
+- Speedrun
+## <b>👾 Custom Anticheat:</b>
+- Detect invalid sabotages
+- Detect malformed RPC's
+- Detect invalid venting
+- Detect invalid animations
+- Detect invalid task completions
+- Detect invalid kills
+- Detect immortality cheats
+- Block attempted votekicks
+## <b>❓ Other Improvements:</b>
+- Language support: English, Italian, Japanese, Russian, Simplified Chinese, Spanish
+- Select a language in Language/YourLanguage.txt
+- Preset system for mod settings
+- Creatable and customizable Templates
+- Eht Dleks (Reverse Skeld) Map
+- Ability to cancel starting countdown
+- Improved main menu
+- Faster startup time
+- Zoom out in lobby or when dead
+- Higher and more accurate Option ranges
+- Always visible lobby timer
+- Access experimental animation test scene
+- Faster chat cooldown (2.2s)
+- 120 character chat limit, copy pasting
+- <b>🎉 And this all works in public lobbies!</b>
+
+### Hotkeys
+| HotKey              | Function                                    | Usable Scene                       |
+| ------------------- | ------------------------------------------- | ---------------------------------- |
+| `Shift`+`L`+`Enter` | Force End Game                              | In Game                            |
+| `Shift`+`M`+`Enter` | Skip meeting when active                    | In Game                            |
+| `C`                 | Cancel game start                           | In Starting Countdown              |
+| `Shift`             | Start the game immediately                  | In Starting Countdown              |
+| `Shift`             | 5x Option increment                         | In Options Menu                    |
+| `Ctrl`              | Noclip in lobby                             | In Lobby                           |
+| `Ctrl`              | 10x Option increment                        | In Options Menu                    |
+
+### Chat Commands
+| Command                                     | Function                                          |
+| ------------------------------------------- | ------------------------------------------------- |
+| /help                                       | Show command help                                 |
+| /l<br>/lastgame                             | Send last game info                               |
+| /r                                          | Send current gamemode/roles description           |
+| /0kc<br>/sns</br>/sp                        | Send respective gamemode description              |
+| /ban {name}                                 | Ban a player by name                              |
+| /kick {name}                                | Kick a player by name                             |
+| /cban {color}                               | Ban a player by color                             |
+| /ckick {color}                              | Kick a player by color                            |
+| /dump                                       | Copy your LogOutput file                          |
+| /eg<br>/endgame                             | Instantly end an ongoing game                     |
+| /em<br>/endmeeting                          | Instantly end an ongoing meeting                  |
+| /aur<br>/socials                            | Send AUR socials (GitHub, Discord)                |
+| /col<br>/color                              | Set color. Can be used to bypass color limit      | 
+| /reload                                     | Reset the *Language*.JSON file to default         |
+| /s<br>/start                                | Start game countdown                              |
+| /vip<br>/moderator<br>/admin                | Add a user to respective list by name             |
+| /t {template}                               | Send a Template from Templates.txt                |
+| /seeker {name}                              | Manually adds someone as Seeker in HnS            |
+| /seekers                                    | Shows manual Seeker list in HnS                   |
+| /clearseekers                               | Clears manual Seeker list in HnS                  |
+| /mapvote                                    | Starts a vote for the map. Default maps only      |
+| /allmapvote                                 | Starts a vote for the map. Includes Eht Dleks     |
+| /gmvote                                     | Starts a vote for the gamemode                    |
+| /private                                    | Sets lobby to private                             |
+| /public                                     | Sets lobby to public                              |
+‎
+
+**Credit to these mods and their developers for their code:**
+### :star: [AUnlocker](https://github.com/astra1dev/AUnlocker)
+> - Original NumberOptionsPatch
+> - Always Show Lobby Timer
+> - Copy Pasting & Character Increase
+### :star: [EHR (Formerly TOHE+)](https://github.com/Gurge44/EndlessHostRoles)
+> - Task Patching
+### :star: [TOH](https://github.com/tukasa0001/TownOfHost) :
+> - OptionHolder & ClientOptionItem
+### :star: [Super New Roles](https://github.com/ykundesu/SuperNewRoles) (SNR):
+> - Credentials menu
+### :star: [TOHY](https://github.com/Yumenopai/TownOfHost_Y) :
+> - Zoom
+### :star: [MoreGamemodes](https://github.com/Rabek009/MoreGamemodes)
+> - Some Chat Patches
+> - OptionItem System
+### :star: 简体中文本地化 / Simplified Chinese Localization
+> - [114514imageset](https://github.com/114514imageset) — 补全缺失键、修正漏翻与术语，校订 `Resources/Language/SimplifiedChinese.json`
+---
+This project is licensed under the GNU General Public License version 3.0. For more details, please refer to the [LICENSE](https://github.com/apemv/AmongUsRevamped/blob/main/LICENSE) file.
+---
+
+<b>This mod is not affiliated with Among Us or Innersloth LLC, and the content contained therein is not endorsed or otherwise sponsored by Innersloth LLC. Portions of the materials contained herein are property of Innersloth LLC. © Innersloth LLC.</b>

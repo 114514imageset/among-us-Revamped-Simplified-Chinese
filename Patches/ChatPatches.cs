@@ -1,0 +1,1134 @@
+using AmongUs.GameOptions;
+using Hazel;
+using InnerNet;
+using System;
+using System.IO;
+using UnityEngine;
+using UnityEngine.UI;
+using TMPro;
+
+namespace AmongUsRevamped;
+
+[HarmonyPatch(typeof(ChatController), nameof(ChatController.Update))]
+internal static class ChatControllerUpdatePatch
+{
+
+    public static void Postfix(ChatController __instance)
+    {
+        if (!__instance||!__instance.freeChatField||!__instance.freeChatField.textArea||!__instance.freeChatField.background||__instance.freeChatField.textArea.compoText == null||!__instance.freeChatField.textArea.outputText) return;
+        if (!__instance.quickChatField||!__instance.quickChatField.background||__instance.quickChatField.text==null) return;
+
+        if (Main.DarkTheme.Value)
+        {
+            __instance.freeChatField.background.color = new Color32(40, 40, 40, byte.MaxValue);
+            __instance.freeChatField.textArea.compoText.Color(Color.white);
+            __instance.freeChatField.textArea.outputText.color = Color.white;
+
+            __instance.quickChatField.background.color = new Color32(40, 40, 40, byte.MaxValue);
+            __instance.quickChatField.text.color = Color.white;
+        }
+        else
+        {
+            __instance.freeChatField.background.color = Color.white;
+            __instance.freeChatField.textArea.compoText.Color(Color.black);
+            __instance.freeChatField.textArea.outputText.color = Color.black;
+
+            __instance.quickChatField.background.color = Color.white;
+            __instance.quickChatField.text.color = Color.black;
+        }
+
+        if (Main.DisableChatModifier.Value && !__instance.freeChatField.textArea.allowAllCharacters)
+        {
+            __instance.freeChatField.textArea.AllowSymbols = false;
+            __instance.freeChatField.textArea.AllowEmail = false;
+            __instance.freeChatField.textArea.characterLimit = 100;
+        }
+        if (!Main.DisableChatModifier.Value)
+        {
+            if (__instance.timeSinceLastMessage < 0.9f)
+            {
+                __instance.timeSinceLastMessage = 0.9f;
+            }
+
+            __instance.freeChatField.textArea.AllowSymbols = true;
+            __instance.freeChatField.textArea.AllowEmail = true;
+            __instance.freeChatField.textArea.characterLimit = 120;            
+        }
+    }
+}
+
+[HarmonyPatch(typeof(ChatBubble), nameof(ChatBubble.SetName))]
+internal static class ChatBubbleSetNamePatch
+{
+    public static void Postfix(ChatBubble __instance, [HarmonyArgument(2)] bool voted)
+    {
+        if (!__instance||!__instance.playerInfo||!__instance.playerInfo.Object||!__instance.playerInfo.Object.Data||!__instance.TextArea||!__instance.Background) return;
+
+        PlayerControl target = __instance.playerInfo.Object;
+
+        if (Main.DarkTheme.Value)
+        {
+            __instance.Background.color = new(0.1f, 0.1f, 0.1f, 1f);
+            __instance.TextArea.color = Color.white;
+
+            if (__instance.playerInfo.Object.Data.IsDead && Utils.InGame) __instance.Background.color = new(0.1f, 0.1f, 0.1f, 0.7f);
+        }
+    }
+}
+
+[HarmonyPatch(typeof(ChatController), nameof(ChatController.SendChat))]
+internal static class SendChatPatch
+{
+    public static string ConvertNum(string input)
+    {
+        if (string.IsNullOrEmpty(input)) return input;
+        int digitCount = 0;
+
+        for (int i = 0; i < input.Length; i++)
+        {
+            if (char.IsDigit(input[i]) && ++digitCount > 5)
+            {
+                var sb = new System.Text.StringBuilder(input.Length);
+
+                foreach (char c in input)
+                {
+                    if (char.IsDigit(c))
+                        sb.Append(Main.CircledDigits[c - '0']);
+                    else
+                        sb.Append(c);
+                }
+                return sb.ToString();
+            }
+        }
+        return input;
+    }
+
+    public static bool Prefix(ChatController __instance)
+    {
+        string msgtext = __instance.freeChatField.textArea.text.Trim();
+        string text = msgtext.ToLower();
+        string converted = ConvertNum(msgtext);
+
+        if (!AmongUsClient.Instance.AmHost) return true;
+
+        if (text == "/reload")
+        {
+            HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, $"{Translator.Get("translationReloaded")}");
+            Translator.Reload();
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text == "/dump")
+        {
+            Utils.DumpLog();
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+        if (text == "/help")
+        {
+            HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, $"{Translator.Get("allCommandsFull")}");
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text == "/s" || text == "/start")
+        {
+            GameStartManager.Instance.BeginGame();
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text == "/eg" || text == "/endgame")
+        {
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+
+            if (!Utils.InGame) return false;
+            GameManager.Instance.RpcEndGame(GameOverReason.ImpostorDisconnect, false);
+            return false;
+        }
+
+        if (text == "/em" || text == "/endmeeting")
+        {
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            
+            if ( !Utils.InGame || !Utils.IsMeeting) return false;
+            MeetingHud.Instance.RpcClose();
+
+            foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+            {
+                if (p.Data.RoleType == RoleTypes.Shapeshifter)
+                {
+                    p.CmdCheckRevertShapeshift(false);
+                }
+            }
+            return false;
+        }
+
+        if (text == "/private")
+        {
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            
+            if (Utils.InGame) return false;
+            AmongUsClient.Instance.ChangeGamePublic(false);
+        }
+
+        if (text == "/public")
+        {
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            
+            if (Utils.InGame) return false;
+            AmongUsClient.Instance.ChangeGamePublic(true);
+        }
+
+        if (text.StartsWith("/vip "))
+        {
+            PlayerControl target = null;
+            string arg = text.Substring(5).Trim();
+
+            foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+            {
+                if (p.Data == null || p == PlayerControl.LocalPlayer) continue;
+
+                if (p.Data.PlayerName.Equals(arg, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = p;
+                    break;
+                }
+            }
+            if (target == null)
+            {
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("permFail", arg));
+            }
+            else
+            {
+                File.AppendAllText(BanManager.VipListPath, "\n" + target.Data.FriendCode);
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("vipAdd", target.Data.PlayerName));
+            }
+
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text.StartsWith("/moderator "))
+        {
+            PlayerControl target = null;
+            string arg = text.Substring(11).Trim();
+
+            foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+            {
+                if (p.Data == null || p == PlayerControl.LocalPlayer) continue;
+
+                if (p.Data.PlayerName.Equals(arg, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = p;
+                    break;
+                }
+            }
+            if (target == null)
+            {
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("permFail", arg));
+            }
+            else
+            {
+                File.AppendAllText(BanManager.ModeratorListPath, "\n" + target.Data.FriendCode);
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("moderatorAdd", target.Data.PlayerName));
+            }
+
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text.StartsWith("/admin "))
+        {
+            PlayerControl target = null;
+            string arg = text.Substring(7).Trim();
+
+            foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+            {
+                if (p.Data == null || p == PlayerControl.LocalPlayer) continue;
+
+                if (p.Data.PlayerName.Equals(arg, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = p;
+                    break;
+                }
+            }
+            if (target == null)
+            {
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("permFail", arg));
+            }
+            else
+            {
+                File.AppendAllText(BanManager.AdminListPath, "\n" + target.Data.FriendCode);
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("adminAdd", target.Data.PlayerName));
+            }
+
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text.StartsWith("/removevip "))
+        {
+            PlayerControl target = null;
+            string arg = text.Substring(11).Trim();
+
+            foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+            {
+                if (p.Data == null || p == PlayerControl.LocalPlayer) continue;
+
+                if (p.Data.PlayerName.Equals(arg, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = p;
+                    break;
+                }
+            }
+            if (target == null)
+            {
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("permFail", arg));
+            }
+            else
+            {
+                File.WriteAllLines(BanManager.VipListPath, File.ReadAllLines(BanManager.VipListPath).Where(x => x.Trim() != target.Data.FriendCode));
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("vipRemove", target.Data.PlayerName));
+            }
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text.StartsWith("/removemoderator "))
+        {
+            PlayerControl target = null;
+            string arg = text.Substring(17).Trim();
+
+            foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+            {
+                if (p.Data == null || p == PlayerControl.LocalPlayer) continue;
+
+                if (p.Data.PlayerName.Equals(arg, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = p;
+                    break;
+                }
+            }
+            if (target == null)
+            {
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("permFail", arg));
+            }
+            else
+            {
+                File.WriteAllLines(BanManager.ModeratorListPath, File.ReadAllLines(BanManager.ModeratorListPath).Where(x => x.Trim() != target.Data.FriendCode));
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("moderatorRemove", target.Data.PlayerName));
+            }
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text.StartsWith("/removeadmin "))
+        {
+            PlayerControl target = null;
+            string arg = text.Substring(13).Trim();
+
+            foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+            {
+                if (p.Data == null || p == PlayerControl.LocalPlayer) continue;
+
+                if (p.Data.PlayerName.Equals(arg, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = p;
+                    break;
+                }
+            }
+            if (target == null)
+            {
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("permFail", arg));
+            }
+            else
+            {
+                File.WriteAllLines(BanManager.AdminListPath, File.ReadAllLines(BanManager.AdminListPath).Where(x => x.Trim() != target.Data.FriendCode));
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("adminRemove", target.Data.PlayerName));
+            }
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text.StartsWith("/seeker "))
+        {
+            if (!Utils.IsLobby || !Utils.isHideNSeek)
+            {
+                __instance.freeChatField.textArea.Clear();
+                __instance.freeChatField.textArea.SetText(string.Empty);
+                return false;
+            }
+
+            string argSeeker = text.Substring(8).Trim();
+            bool found = false;
+
+            foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+            {
+                if (p.Data == null) continue;
+
+                if (p.Data.PlayerName.Equals(argSeeker, StringComparison.OrdinalIgnoreCase))
+                {
+                    found = true;
+                    PlayerControlSetRolePatch.manualSeekers.Add(p.PlayerId);
+                    break;
+                }
+            }
+
+            if (found)
+            {
+                List<string> names = new();
+
+                foreach (PlayerControl pl in PlayerControl.AllPlayerControls)
+                {
+                    if (PlayerControlSetRolePatch.manualSeekers.Contains(pl.PlayerId)) names.Add(pl.Data.PlayerName);
+                }
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("seekers") + string.Join(", ", names));
+            }
+
+            if (!found)
+            {
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, $"Player '{argSeeker}' not found.");   
+            }
+
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text == "/clearseeker")
+        {
+            PlayerControlSetRolePatch.manualSeekers.Clear();
+            HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("clearedSeekers"));
+
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text == "/seekers")
+        {
+            List<string> n = new();
+
+            foreach (PlayerControl pc in PlayerControl.AllPlayerControls)
+            {
+                if (PlayerControlSetRolePatch.manualSeekers.Contains(pc.PlayerId)) n.Add(pc.Data.PlayerName);
+            }
+            HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("seekers") + string.Join(", ", n));
+
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;      
+        }
+
+        if (__instance.timeSinceLastMessage < 3f || OnGameJoinedPatch.WaitingForChat) return false;
+
+        if (text == "/mapvote")
+        {
+            if (Utils.IsLobby)
+            {
+                Utils.MapVote(false);
+
+                __instance.freeChatField.textArea.Clear();
+                __instance.freeChatField.textArea.SetText(string.Empty);
+                return false;   
+            }
+        }
+
+        if (text == "/gmvote")
+        {
+            if (Utils.IsLobby)
+            {
+                Utils.ModeVote(false);
+
+                __instance.freeChatField.textArea.Clear();
+                __instance.freeChatField.textArea.SetText(string.Empty);
+                return false;   
+            }
+        }
+
+        if (text == "/vote a")
+        {
+            if (Utils.MapVoteActive)
+            {
+                if (Utils.HasVoted.Contains(PlayerControl.LocalPlayer.Data.PlayerId)) return true;
+                Utils.skeldVotes++;
+                Utils.HasVoted.Add(PlayerControl.LocalPlayer.Data.PlayerId);
+            }
+            else if (Utils.ModeVoteActive)
+            {
+                if (Utils.HasModeVoted.Contains(PlayerControl.LocalPlayer.Data.PlayerId)) return true;
+                Utils.standardVotes++;
+                Utils.HasModeVoted.Add(PlayerControl.LocalPlayer.Data.PlayerId);
+            }
+        }
+        if (text == "/vote b")
+        {
+            if (Utils.MapVoteActive)
+            {
+                if (Utils.HasVoted.Contains(PlayerControl.LocalPlayer.Data.PlayerId)) return true;
+                Utils.miraVotes++;
+                Utils.HasVoted.Add(PlayerControl.LocalPlayer.Data.PlayerId);
+            }
+            else if (Utils.ModeVoteActive)
+            {
+                if (Utils.HasModeVoted.Contains(PlayerControl.LocalPlayer.Data.PlayerId)) return true;
+                Utils.noKillCooldownVotes++;
+                Utils.HasModeVoted.Add(PlayerControl.LocalPlayer.Data.PlayerId);
+            }
+        }
+        if (text == "/vote c")
+        {
+            if (Utils.MapVoteActive)
+            {
+                if (Utils.HasVoted.Contains(PlayerControl.LocalPlayer.Data.PlayerId)) return true;
+                Utils.polusVotes++;
+                Utils.HasVoted.Add(PlayerControl.LocalPlayer.Data.PlayerId);
+            }
+            else if (Utils.ModeVoteActive)
+            {
+                if (Utils.HasModeVoted.Contains(PlayerControl.LocalPlayer.Data.PlayerId)) return true;
+                Utils.speedrunVotes++;
+                Utils.HasModeVoted.Add(PlayerControl.LocalPlayer.Data.PlayerId);
+            }
+        }
+        if (text == "/vote d")
+        {
+            if (Utils.MapVoteActive)
+            {
+                if (Utils.HasVoted.Contains(PlayerControl.LocalPlayer.Data.PlayerId)) return true;
+                Utils.airshipVotes++;
+                Utils.HasVoted.Add(PlayerControl.LocalPlayer.Data.PlayerId);
+            }
+            else if (Utils.ModeVoteActive)
+            {
+                if (Utils.HasModeVoted.Contains(PlayerControl.LocalPlayer.Data.PlayerId)) return true;
+                Utils.shiftAndSeekVotes++;
+                Utils.HasModeVoted.Add(PlayerControl.LocalPlayer.Data.PlayerId);
+            }
+        }
+        if (text == "/vote e")
+        {
+            if (Utils.MapVoteActive)
+            {
+                if (Utils.HasVoted.Contains(PlayerControl.LocalPlayer.Data.PlayerId)) return true;
+                Utils.fungleVotes++;
+                Utils.HasVoted.Add(PlayerControl.LocalPlayer.Data.PlayerId);
+            }
+            else if (Utils.ModeVoteActive)
+            {
+                if (Utils.HasModeVoted.Contains(PlayerControl.LocalPlayer.Data.PlayerId)) return true;
+                Utils.poofAndSeekVotes++;
+                Utils.HasModeVoted.Add(PlayerControl.LocalPlayer.Data.PlayerId);
+            }
+        }
+        if (text == "/vote f")
+        {
+            if (Utils.MapVoteActive)
+            {
+                if (Utils.HasVoted.Contains(PlayerControl.LocalPlayer.Data.PlayerId)) return true;
+                Utils.dleksVotes++;
+                Utils.HasVoted.Add(PlayerControl.LocalPlayer.Data.PlayerId);
+            }
+        }
+
+        if (text == "/l" || text == "/lastgame")
+        {
+            if (string.IsNullOrEmpty(NormalGameEndChecker.LastWinReason) || Utils.InGame) return false;
+            Utils.ChatCommand(__instance, $"{NormalGameEndChecker.LastWinReason}", "", false);
+
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text == "/aur" || text == "/socials")
+        {
+            Utils.ChatCommand(__instance, Translator.Get("aurSocials"), "", false);
+            return false;
+        }
+
+        if (text == "/0kc" || text == "/0killcooldown")
+        {
+            Utils.ChatCommand(__instance, Translator.Get("mode0Kcd"), "", false);
+            return false;
+        }
+
+        if (text == "/sns" || text == "/shiftandseek")
+        {
+            Utils.ChatCommand(__instance, Translator.Get("modeSNS"), Translator.Get("modeSNSResult", Options.CrewAutoWinsGameAfter.GetInt()), true);
+            return false;
+        }
+        if (text == "/sns2" || text == "/shiftandseek2")
+        {
+            Utils.ChatCommand(__instance, Translator.Get("modeSNS2"), "", false);
+            return false;
+        }
+
+        if (text == "/sr" || text == "/speedrun")
+        {
+            Utils.ChatCommand(__instance, Translator.Get("modeSpeedrun", Options.GameAutoEndsAfter.GetInt()), "", false);
+            return false;
+        }
+
+        if (text == "/pns" || text == "/poofandseek")
+        {
+            Utils.ChatCommand(__instance, Translator.Get("modePNS", Options.BadMoveTimeToSuicide.GetInt()), Translator.Get("modePNSResult", Options.PNSCrewAutoWinsGameAfter.GetInt()), true);
+            return false;
+        }
+
+        if (text == "/r" || text == "/roles")
+        {
+            switch (Options.Gamemode.GetValue())
+            {
+                case 0:
+                if (GameOptionsManager.Instance.CurrentGameOptions.GetFloat(FloatOptionNames.KillCooldown) == 0.001f)
+                {
+                    Utils.ChatCommand(__instance, Translator.Get("mode0Kcd"), "", false);
+                }
+                break;
+
+                case 1:
+                Utils.ChatCommand(__instance, Translator.Get("modeSNS"), Translator.Get("modeSNSResult", Options.CrewAutoWinsGameAfter.GetInt()), true); 
+                break;
+
+                case 2:
+                Utils.ChatCommand(__instance, Translator.Get("modeSpeedrun", Options.GameAutoEndsAfter.GetInt()), "", false);
+                break;
+
+                case 3:
+                Utils.ChatCommand(__instance, Translator.Get("modePNS", Options.BadMoveTimeToSuicide.GetInt()), Translator.Get("modePNSResult", Options.PNSCrewAutoWinsGameAfter.GetInt()), true);
+                break;
+            }
+            __instance.timeSinceLastMessage = 0.8f;
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+
+        if (text.StartsWith("/t "))
+        {
+            BanManager.LoadTemplates();
+
+            string templateName = text[3..].Trim().ToLower();
+
+            if (BanManager.Templates.TryGetValue(templateName, out string templateMessage))
+            {
+                if (templateMessage.Length < 121)
+                {
+                    Utils.ChatCommand(__instance, BanManager.CheckTemplate(templateMessage), "", false);
+                }
+                else
+                {
+                    HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("tooLongTemplate")); 
+                }
+            }
+            else
+            {
+                Logger.Info($"Could not find template '{templateName}'", "TemplateManager");
+                HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, $"Template '{templateName}' not found.");
+            }
+            __instance.freeChatField.textArea.Clear();
+            __instance.freeChatField.textArea.SetText(string.Empty);
+            return false;
+        }
+        
+        bool col1 = text.StartsWith("/col ");
+        bool col2  = text.StartsWith("/color ");
+        bool col3 = text.StartsWith("/colour ");
+
+        if (col1 || col2 || col3)
+        {
+            string argCol = text.Substring(col1 ? 5 : col2 ? 7 : col3 ? 8 : 0).Trim();
+
+            if (Utils.TryGetColorId(argCol, out byte colId) && (col1 || col2 || col3))
+            {
+                PlayerControl.LocalPlayer.RpcSetColor(colId);
+                __instance.freeChatField.textArea.Clear();
+                __instance.freeChatField.textArea.SetText(string.Empty);
+            }
+
+            return false;
+        }
+
+        else
+        {
+
+            bool isKick = text.StartsWith("/kick ");
+            bool isBan  = text.StartsWith("/ban ");
+
+            bool isColorKick = text.StartsWith("/ckick ");
+            bool isColorBan  = text.StartsWith("/cban ");
+
+            bool banLog = isBan || isColorBan;
+
+            if (!isKick && !isBan && !isColorKick && !isColorBan)
+            {
+                
+                //__instance.freeChatField.textArea.SetText(converted);
+                //Utils.ChatCommand(__instance, $"{converted}", "", false);
+                Logger.Info($" {PlayerControl.LocalPlayer.Data.PlayerName}: {msgtext}", "SendChat");
+                return true;
+            }
+
+            string arg = text.Substring(isKick ? 6 : isBan ? 5 : isColorKick ? 7 : isColorBan ? 6 : 0).Trim();
+
+            PlayerControl target = null;
+
+            foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+            {
+                if (p.Data == null || p == PlayerControl.LocalPlayer) continue;
+
+                if ((isKick || isBan) && p.Data.PlayerName.Equals(arg, StringComparison.OrdinalIgnoreCase))
+                {
+                    target = p;
+                    break;
+                }
+
+                if ((isColorKick || isColorBan) && Utils.TryGetColorId(arg, out byte colorId))
+                {
+                    if (p.Data.DefaultOutfit.ColorId == colorId)
+                    {
+                        target = p;
+                        break;
+                    }
+                }
+            }
+
+            if (target != null)
+            {
+                AmongUsClient.Instance.KickPlayer(target.Data.ClientId, isBan || isColorBan);
+                Logger.Info($" {(banLog ? "banned" : "kicked")} {target.Data.PlayerName}", "Kick&BanCommand");
+                __instance.freeChatField.textArea.Clear();
+                __instance.freeChatField.textArea.SetText(string.Empty);
+            }
+            return false;
+        }
+    }
+}
+
+[HarmonyPatch(typeof(PlayerControl), nameof(PlayerControl.HandleRpc))]
+public static class RPCHandlerPatch
+{
+    public static void Prefix(PlayerControl __instance, [HarmonyArgument(0)] byte callId, [HarmonyArgument(1)] MessageReader reader)
+	{
+        if (!AmongUsClient.Instance.AmHost) return;
+
+        var rpcType = (RpcCalls)callId;
+        MessageReader subReader = MessageReader.Get(reader);
+
+        switch (rpcType)
+        {
+            case RpcCalls.SendChat:
+            {
+                string msgtext = subReader.ReadString();
+                string text = msgtext.ToLower();
+
+                Logger.Info($" {__instance.Data.PlayerName}: {msgtext}", "SendChat");
+                
+                BanManager.IsStartWord(__instance, text);
+                BanManager.IsWordBanned(__instance, text);
+
+                if (text.StartsWith("/seeker ") && Utils.CheckAccessLevel(__instance.Data.FriendCode) >= Options.SlashMapAndSeekerCmd.GetValue())
+                {
+                    if (!Utils.IsLobby || !Utils.isHideNSeek)
+                    {
+                        return;
+                    }
+
+                    string argSeeker = text.Substring(8).Trim();
+                    bool found = false;
+
+                    foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+                    {
+                        if (p.Data == null) continue;
+
+                        if (p.Data.PlayerName.Equals(argSeeker, StringComparison.OrdinalIgnoreCase))
+                        {
+                            found = true;
+                            PlayerControlSetRolePatch.manualSeekers.Add(p.PlayerId);
+                            break;
+                        }
+                    }
+
+                    if (found)
+                    {
+                        List<string> names = new();
+
+                        foreach (PlayerControl pl in PlayerControl.AllPlayerControls)
+                        {
+                            if (PlayerControlSetRolePatch.manualSeekers.Contains(pl.PlayerId)) names.Add(pl.Data.PlayerName);
+                        }
+                        HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("seekers") + string.Join(", ", names));
+                    }
+
+                    if (!found)
+                    {
+                        HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, $"Player '{argSeeker}' not found.");   
+                    }
+                }
+
+                if (text == "/clearseeker")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashMapAndSeekerCmd.GetValue()) return;
+                    PlayerControlSetRolePatch.manualSeekers.Clear();
+                    HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("clearedSeekers"));
+                }
+
+                bool col1 = text.StartsWith("/col ");
+                bool col2  = text.StartsWith("/color ");
+                bool col3 = text.StartsWith("/colour ");
+
+                if ((col1 || col2 || col3) && !Utils.InGame)
+                {
+                    string argCol = text.Substring(col1 ? 5 : col2 ? 7 : col3 ? 8 : 0).Trim();
+
+                    if (Utils.TryGetColorId(argCol, out byte colId))
+                    {
+                        if (Utils.CheckAccessLevel(__instance.Data.FriendCode) >= Options.SlashColorCmd.GetValue())
+                        {
+                            if (colId > 17 && !Options.AllowFortegreen.GetBool()) return;
+                            __instance.RpcSetColor(colId);
+                        }    
+                    }
+                }
+
+                // Banning works by name and color. Commands are separated incase someone has a color as their name
+                bool isKick = text.StartsWith("/kick ");
+                bool isBan  = text.StartsWith("/ban ");
+
+                bool isColorKick = text.StartsWith("/ckick ");
+                bool isColorBan  = text.StartsWith("/cban ");
+
+                bool banLog = isBan || isColorBan;
+
+                if (isKick || isBan || isColorKick || isColorBan)
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) >= Options.SlashKickCmd.GetValue())
+                    {
+                        string arg = text.Substring(isKick ? 6 : isBan ? 5 : isColorKick ? 7 : isColorBan ? 6 : 0).Trim();
+
+                        PlayerControl target = null;
+
+                        foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+                        {
+                            if (p.Data == null || p == PlayerControl.LocalPlayer || Utils.CheckAccessLevel(p.Data.FriendCode) >= 1) continue;
+
+                            if ((isKick || isBan) && p.Data.PlayerName.Equals(arg, StringComparison.OrdinalIgnoreCase))
+                            {
+                                target = p;
+                                break;
+                            }
+
+                            if ((isColorKick || isColorBan) && Utils.TryGetColorId(arg, out byte colorId))
+                            {
+                                if (p.Data.DefaultOutfit.ColorId == colorId)
+                                {
+                                    target = p;
+                                    break;
+                                }
+                            }
+                        }
+                        if (banLog && Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashBanCmd.GetValue()) return;
+
+                        if (target != null)
+                        {
+                            AmongUsClient.Instance.KickPlayer(target.Data.ClientId, isBan || isColorBan);
+                            Logger.Info($" {__instance.Data.PlayerName} {(banLog ? "banned" : "kicked")} {target.Data.PlayerName}", "Kick&BanCommand");
+                        }
+                    }
+                }
+
+                if (text == "/eg" || text == "/endgame")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashStartAndEndGameCmd.GetValue()) return;
+                    GameManager.Instance.RpcEndGame(GameOverReason.ImpostorDisconnect, false);
+                }
+
+                if (text == "/em" || text == "/endmeeting")
+                {
+                    if (Utils.IsMeeting)
+                    {
+                        if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashEndMeetingCmd.GetValue()) return;
+                        MeetingHud.Instance.RpcClose();
+
+                        foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+                        {
+                            if (p.Data.RoleType == RoleTypes.Shapeshifter)
+                            {
+                                p.CmdCheckRevertShapeshift(false);
+                            }
+                        }
+                    }
+                }
+
+                if (text == "/private")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashStartAndEndGameCmd.GetValue() || Utils.InGame) return;
+                    AmongUsClient.Instance.ChangeGamePublic(false);
+                }
+
+                if (text == "/public")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashStartAndEndGameCmd.GetValue() || Utils.InGame) return;
+                    AmongUsClient.Instance.ChangeGamePublic(true);
+                }
+
+                if (text == "/s" || text == "/start")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashStartAndEndGameCmd.GetValue()) return;
+                    GameStartManager.Instance.BeginGame();
+                }
+
+                if (OnGameJoinedPatch.WaitingForChat || GameStartManagerUpdatePatch.CountingDown) return;
+
+                if (text == "/mapvote")
+                {
+                    if (Utils.IsLobby)
+                    {
+                        if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashMapAndSeekerCmd.GetValue()) return;
+                        Utils.MapVote(true);
+                    }
+                }
+
+                if (text == "/gmvote")
+                {
+                    if (Utils.IsLobby)
+                    {
+                        if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashMapAndSeekerCmd.GetValue()) return;
+                        Utils.ModeVote(true);
+                    }
+                }
+
+                if (text == "/vote a")
+                {
+                    if (Utils.MapVoteActive)
+                    {
+                        if (Utils.HasVoted.Contains(__instance.Data.PlayerId)) return;
+                        Utils.skeldVotes++;
+                        Utils.HasVoted.Add(__instance.Data.PlayerId);
+                    }
+                    else if (Utils.ModeVoteActive)
+                    {
+                        if (Utils.HasModeVoted.Contains(__instance.Data.PlayerId)) return;
+                        Utils.standardVotes++;
+                        Utils.HasModeVoted.Add(__instance.Data.PlayerId);
+                    }
+                }
+                if (text == "/vote b")
+                {
+                    if (Utils.MapVoteActive)
+                    {
+                        if (Utils.HasVoted.Contains(__instance.Data.PlayerId)) return;
+                        Utils.miraVotes++;
+                        Utils.HasVoted.Add(__instance.Data.PlayerId);
+                    }
+                    else if (Utils.ModeVoteActive)
+                    {
+                        if (Utils.HasModeVoted.Contains(__instance.Data.PlayerId)) return;
+                        Utils.noKillCooldownVotes++;
+                        Utils.HasModeVoted.Add(__instance.Data.PlayerId);
+                    }
+                }
+                if (text == "/vote c")
+                {
+                    if (Utils.MapVoteActive)
+                    {
+                        if (Utils.HasVoted.Contains(__instance.Data.PlayerId)) return;
+                        Utils.polusVotes++;
+                        Utils.HasVoted.Add(__instance.Data.PlayerId);
+                    }
+                    else if (Utils.ModeVoteActive)
+                    {
+                        if (Utils.HasModeVoted.Contains(__instance.Data.PlayerId)) return;
+                        Utils.speedrunVotes++;
+                        Utils.HasModeVoted.Add(__instance.Data.PlayerId);
+                    }
+                }
+                if (text == "/vote d")
+                {
+                    if (Utils.MapVoteActive)
+                    {
+                        if (Utils.HasVoted.Contains(__instance.Data.PlayerId)) return;
+                        Utils.airshipVotes++;
+                        Utils.HasVoted.Add(__instance.Data.PlayerId);
+                    }
+                    else if (Utils.ModeVoteActive)
+                    {
+                        if (Utils.HasModeVoted.Contains(__instance.Data.PlayerId)) return;
+                        Utils.shiftAndSeekVotes++;
+                        Utils.HasModeVoted.Add(__instance.Data.PlayerId);
+                    }
+                }
+                if (text == "/vote e")
+                {
+                    if (Utils.MapVoteActive)
+                    {
+                        if (Utils.HasVoted.Contains(__instance.Data.PlayerId)) return;
+                        Utils.fungleVotes++;
+                        Utils.HasVoted.Add(__instance.Data.PlayerId);
+                    }
+                    else if (Utils.ModeVoteActive)
+                    {
+                        if (Utils.HasModeVoted.Contains(__instance.Data.PlayerId)) return;
+                        Utils.poofAndSeekVotes++;
+                        Utils.HasModeVoted.Add(__instance.Data.PlayerId);
+                    }
+                }
+                if (text == "/vote f")
+                {
+                    if (Utils.MapVoteActive)
+                    {
+                        if (Utils.HasVoted.Contains(__instance.Data.PlayerId)) return;
+                        Utils.dleksVotes++;
+                        Utils.HasVoted.Add(__instance.Data.PlayerId);
+                    }
+                }
+
+                if (text == "/l" || text == "/lastgame")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashLastGameCmd.GetValue()) return;
+                    if (string.IsNullOrEmpty(NormalGameEndChecker.LastWinReason) || Utils.InGame) return;
+                    Utils.ModeratorChatCommand($"{NormalGameEndChecker.LastWinReason}", "", false);
+                }
+
+                if (text == "/aur" || text == "/socials")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashLastGameCmd.GetValue()) return;
+                    Utils.ModeratorChatCommand(Translator.Get("aurSocials"), "", false);
+                }
+
+                if (text == "/0kc" || text == "/0killcooldown")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashRolesAndGamemodeCmd.GetValue()) return;
+                    Utils.ModeratorChatCommand(Translator.Get("mode0Kcd"), "", false);
+                }
+                if (text == "/sns" || text == "/shiftandseek")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashRolesAndGamemodeCmd.GetValue()) return;
+                    Utils.ModeratorChatCommand(Translator.Get("modeSNS"), Translator.Get("modeSNSResult", Options.CrewAutoWinsGameAfter.GetInt()), true);
+                }
+                if (text == "/sns2" || text == "/shiftandseek2")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashRolesAndGamemodeCmd.GetValue()) return;
+                    Utils.ModeratorChatCommand(Translator.Get("modeSNS2"), "", false);
+                }
+
+                if (text == "/sr" || text == "/speedrun")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashRolesAndGamemodeCmd.GetValue()) return;
+                    Utils.ModeratorChatCommand(Translator.Get("modeSpeedrun", Options.GameAutoEndsAfter.GetInt()), "", false);
+                }
+
+                if (text == "/pns" || text == "/poofandseek")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashRolesAndGamemodeCmd.GetValue()) return;
+                    Utils.ModeratorChatCommand(Translator.Get("modePNS", Options.BadMoveTimeToSuicide.GetInt()), Translator.Get("modePNSResult", Options.PNSCrewAutoWinsGameAfter.GetInt()), true);
+                }
+
+                if (text == "/r" || text == "/roles")
+                {
+                    if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashRolesAndGamemodeCmd.GetValue()) return;
+                    switch (Options.Gamemode.GetValue())
+                    {
+                        case 0:
+                        if (GameOptionsManager.Instance.CurrentGameOptions.GetFloat(FloatOptionNames.KillCooldown) == 0.001f)
+                        {
+                            Utils.ModeratorChatCommand(Translator.Get("mode0Kcd"), "", false);
+                        }
+                        break;
+
+                        case 1:
+                        Utils.ModeratorChatCommand(Translator.Get("modeSNS"), Translator.Get("modeSNSResult", Options.CrewAutoWinsGameAfter.GetInt()), true);           
+                        break;
+
+                        case 2:
+                        Utils.ModeratorChatCommand(Translator.Get("modeSpeedrun", Options.GameAutoEndsAfter.GetInt()), "", false);
+                        break;
+
+                        case 3:
+                        Utils.ModeratorChatCommand(Translator.Get("modePNS", Options.BadMoveTimeToSuicide.GetInt()), Translator.Get("modePNSResult", Options.PNSCrewAutoWinsGameAfter.GetInt()), true);
+                        break;
+
+                    }
+                }
+
+                if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < Options.SlashRolesAndGamemodeCmd.GetValue()) return;
+
+                if (text.StartsWith("/t "))
+                {
+                    BanManager.LoadTemplates();
+
+                    string templateName = text[3..].Trim().ToLower();
+
+                    if (BanManager.Templates.TryGetValue(templateName, out string templateMessage))
+                    {
+                        if (templateMessage.Length < 121)
+                        {  
+                            Utils.ModeratorChatCommand(BanManager.CheckTemplate(templateMessage), "", false);
+                        }
+                        else
+                        {
+                            HudManager.Instance.Chat.AddChat(PlayerControl.LocalPlayer, Translator.Get("tooLongTemplate"));                            
+                        }
+                    }
+                }
+                break;
+            }
+        }
+    }
+}
+
+[HarmonyPatch(typeof(FreeChatInputField), nameof(FreeChatInputField.UpdateCharCount))]
+public static class FreeChatInputFieldUpdateCharCountPatch
+{
+    public static void Postfix(FreeChatInputField __instance)
+    {
+        if (!Main.DisableChatModifier.Value)
+        {
+            __instance.charCountText.SetText($"{__instance.textArea.text.Length}/120");            
+        }
+    }
+}
+
+// https://github.com/astra1dev/AUnlocker/blob/main/src/Patches/ChatPatches.cs
+[HarmonyPatch(typeof(TextBoxTMP), nameof(TextBoxTMP.Update))]
+public static class TextBoxTMPUpdatePatch
+{
+    public static void Postfix(TextBoxTMP __instance)
+    {
+        if (!Main.DisableChatModifier.Value && __instance.hasFocus)
+        {
+            if (!Input.GetKey(KeyCode.LeftControl) && !Input.GetKey(KeyCode.RightControl)) return;
+
+            if (Input.GetKeyDown(KeyCode.C))
+            {
+                GUIUtility.systemCopyBuffer = __instance.text;
+            }
+            if (Input.GetKeyDown(KeyCode.V))
+            {
+             __instance.SetText(__instance.text + GUIUtility.systemCopyBuffer);
+            }
+            if (Input.GetKeyDown(KeyCode.X))
+            {
+                GUIUtility.systemCopyBuffer = __instance.text;
+                __instance.SetText("");
+            }
+        }
+    }
+}

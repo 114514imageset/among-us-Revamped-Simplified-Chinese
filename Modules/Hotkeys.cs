@@ -1,0 +1,67 @@
+﻿using AmongUs.Data;
+using AmongUs.GameOptions;
+using Hazel;
+using InnerNet;
+using UnityEngine;
+
+namespace AmongUsRevamped;
+
+#if !ANDROID
+[HarmonyPatch(typeof(ControllerManager), nameof(ControllerManager.Update))]
+internal class Hotkeys
+{
+    public static int IncrementMultiplier;
+    public static void Postfix()
+    {
+        if (AmongUsClient.Instance == null || PlayerControl.LocalPlayer == null) return;
+
+        bool Shift = Input.GetKey(KeyCode.LeftShift) || Input.GetKey(KeyCode.RightShift);
+        bool Ctrl = Input.GetKey(KeyCode.LeftControl) || Input.GetKey(KeyCode.RightControl);
+        bool Enter = Input.GetKeyDown(KeyCode.Return);
+
+        if ((!AmongUsClient.Instance.IsGameStarted || !Utils.IsOnlineGame) && Utils.CanMove && PlayerControl.LocalPlayer.Collider != null)
+        {
+            PlayerControl.LocalPlayer.Collider.enabled = !Ctrl;
+        }
+        
+        if (!AmongUsClient.Instance.AmHost) return;
+
+        if (Input.GetKey(KeyCode.L) && Shift && Enter)
+        {
+            GameManager.Instance.RpcEndGame(GameOverReason.ImpostorDisconnect, false);
+        }
+        
+        if (Input.GetKey(KeyCode.M) && Shift && Enter && Utils.InGame)
+        {
+            if (Utils.IsMeeting)
+            {
+                MeetingHud.Instance.RpcClose();
+
+                foreach (PlayerControl p in PlayerControl.AllPlayerControls)
+                {
+                    if (p.Data.RoleType == RoleTypes.Shapeshifter)
+                    {
+                        p.CmdCheckRevertShapeshift(false);
+                    }
+                }
+            }
+        }
+
+        if (Shift && GameStartManager.InstanceExists  && GameStartManager.Instance != null && GameStartManager.Instance.startState == GameStartManager.StartingStates.Countdown && !HudManager.Instance.Chat.IsOpenOrOpening)
+        {
+            GameStartManager.Instance.countDownTimer = 0;
+        }
+
+        if (Input.GetKeyDown(KeyCode.C) && GameStartManager.InstanceExists && GameStartManager.Instance != null && GameStartManager.Instance.startState == GameStartManager.StartingStates.Countdown && !HudManager.Instance.Chat.IsOpenOrOpening && Utils.IsLobby)
+        {
+            Logger.Info("Resetted start countdown", "KeyCommand");
+            GameStartManager.Instance.ResetStartState();
+            Logger.SendInGame("Starting countdown canceled");
+        }
+
+        if (Shift) IncrementMultiplier = 5;
+        else if (Ctrl) IncrementMultiplier = 10;
+        else IncrementMultiplier = 1;
+    }
+}
+#endif

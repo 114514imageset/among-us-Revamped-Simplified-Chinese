@@ -1,0 +1,111 @@
+using System;
+using System.Diagnostics;
+using System.Diagnostics.CodeAnalysis;
+using UnityEngine;
+
+namespace AmongUsRevamped
+{
+    // https://github.com/tukasa0001/TownOfHost
+    [HarmonyPatch(typeof(OptionsMenuBehaviour), nameof(OptionsMenuBehaviour.Start))]
+    public static class OptionsMenuBehaviourStartPatch
+    {
+        private static ClientOptionItem GM;
+        private static ClientOptionItem ShowFPS;
+        private static ClientOptionItem AutoStart;
+        private static ClientOptionItem DarkTheme;
+        private static ClientOptionItem LobbyMusic;
+        private static ClientOptionItem DisableInfoWhenDead;
+        private static ClientOptionItem DisableCommandHelper;
+        private static ClientOptionItem DisableCompatibilityWarning;
+        private static ClientOptionItem DisableChatModifier;
+        private static ClientOptionItem DisableLobbyInfo;
+
+        public static void Postfix(OptionsMenuBehaviour __instance)
+        {
+            if (__instance.DisableMouseMovement == null) return;
+
+            if (GM == null || GM.ToggleButton == null)
+            {
+                GM = ClientOptionItem.Create(Translator.Get("gameMaster"), Main.GM, __instance, GMButtonToggle);
+
+                static void GMButtonToggle()
+                {
+                    if (Main.GM.Value && Utils.IsLobby) HudManager.Instance.ShowPopUp(Translator.Get("gameMasterWarning"));
+                }
+            }
+
+            if (ShowFPS == null || ShowFPS.ToggleButton == null)
+                ShowFPS = ClientOptionItem.Create(Translator.Get("showFPS"), Main.ShowFps, __instance);
+
+            if (DisableInfoWhenDead == null || DisableInfoWhenDead.ToggleButton == null)
+                DisableInfoWhenDead = ClientOptionItem.Create(Translator.Get("disableInfoWhenDead"), Main.DisableInfoWhenDead, __instance);
+
+            if (AutoStart == null || AutoStart.ToggleButton == null)
+            {
+                AutoStart = ClientOptionItem.Create(Translator.Get("autoStart"), Main.AutoStart, __instance, AutoStartButtonToggle);
+
+                static void AutoStartButtonToggle()
+                {
+                    if (!Main.AutoStart.Value && GameStartManager.InstanceExists &&
+                        GameStartManager.Instance.startState == GameStartManager.StartingStates.Countdown)
+                    {
+                        GameStartManager.Instance.ResetStartState();
+                        Logger.SendInGame(Translator.Get("CancelStartCountDown"));
+                    }
+                }
+            }
+
+            if (DarkTheme == null || DarkTheme.ToggleButton == null)
+                DarkTheme = ClientOptionItem.Create(Translator.Get("enableDarkTheme"), Main.DarkTheme, __instance);
+
+            if (LobbyMusic == null || LobbyMusic.ToggleButton == null)
+                LobbyMusic = ClientOptionItem.Create(Translator.Get("enableLobbyMusic"), Main.LobbyMusic, __instance);
+
+            if (DisableCommandHelper == null || DisableCommandHelper.ToggleButton == null)
+                DisableCommandHelper = ClientOptionItem.Create(Translator.Get("disableCommandHelper"), Main.DisableCommandHelper, __instance);
+
+            if (DisableCompatibilityWarning == null || DisableCompatibilityWarning.ToggleButton == null)
+                DisableCompatibilityWarning = ClientOptionItem.Create(Translator.Get("disableCompatibilityWarning"), Main.DisableCompatibilityWarning, __instance);
+
+            if (DisableChatModifier == null || DisableChatModifier.ToggleButton == null)
+                DisableChatModifier = ClientOptionItem.Create(Translator.Get("disableChatModifier"), Main.DisableChatModifier, __instance);
+
+            if (DisableLobbyInfo == null || DisableLobbyInfo.ToggleButton == null)
+                DisableLobbyInfo = ClientOptionItem.Create(Translator.Get("disableLobbyInfo"), Main.DisableLobbyInfo, __instance);
+        }
+    }
+
+    [HarmonyPatch(typeof(OptionsMenuBehaviour), nameof(OptionsMenuBehaviour.Close))]
+    public static class OptionsMenuBehaviourClosePatch
+    {
+        public static void Postfix()
+        {
+            ClientOptionItem.CustomBackground?.gameObject.SetActive(false);
+        }
+    }
+
+    // MY MODSTAMP IS FASTER THAN YOURS!!11!!!1
+    [HarmonyPatch(typeof(SplashManager), nameof(SplashManager.Update))]
+    internal class SplashLogoAnimatorPatch
+    {
+        public static void Prefix(SplashManager __instance)
+        {
+            ModManager.Instance.ShowModStamp();
+            __instance.sceneChanger.AllowFinishLoadingScene();
+            __instance.startedSceneLoad = true;
+        }
+    }
+
+    [HarmonyPatch(typeof(HudManager), nameof(HudManager.Update))]
+    public static class HudManager_Update
+    {
+	    public static void Postfix(HudManager __instance)
+        {
+            if (Main.GM.Value && AmongUsClient.Instance.AmHost)
+            {
+			    __instance.Chat.gameObject.SetActive(true);
+			    __instance.MapButton.gameObject.SetActive(true); 
+            }
+        }
+    }
+}

@@ -1,0 +1,262 @@
+﻿using AmongUs.Data;
+using AmongUs.GameOptions;
+using InnerNet;
+using System.Text.RegularExpressions;
+using TMPro;
+using UnityEngine;
+
+namespace AmongUsRevamped;
+
+[HarmonyPatch(typeof(AmongUsClient), nameof(AmongUsClient.OnGameJoined))]
+internal static class OnGameJoinedPatch
+{
+    public static bool WaitingForChat;
+    public static bool AutoStartCheck;
+    public static void Postfix()
+    {
+        Logger.Info(" -------- GAME JOINED --------", "OnGameJoined");
+
+        if (!AmongUsClient.Instance.AmHost) return;
+
+        WaitingForChat = false;
+        AutoStartCheck = false;
+
+        if (Main.AutoStart.Value)
+        {
+            LateTask.Tasks.Clear();
+
+            new LateTask(() =>
+            {
+                AutoStartCheck = true;
+            }, Options.WaitAutoStart.GetFloat(), "AutoStartTimer");
+        }
+
+        if (Options.AutoSendGameInfo.GetBool() && !string.IsNullOrEmpty(NormalGameEndChecker.LastWinReason))
+        {      
+            WaitingForChat = true;
+
+            new LateTask(() =>
+            {        
+                Utils.ShowLastResult();
+            }, 3f, "AutoSendGameInfo");
+
+            new LateTask(() =>
+            {        
+                WaitingForChat = false;
+            }, 5.2f, "AutoSendGameInfo2");
+        }
+
+        if (Options.AutomaticMapPoll.GetBool())
+        {
+            new LateTask(() =>
+            {        
+                Utils.MapVote(true);
+            }, Options.TimeBeforeMapPoll.GetInt(), "AutoMapPoll");
+        }
+        if (Options.AutomaticModePoll.GetBool())
+        {
+            new LateTask(() =>
+            {        
+                Utils.ModeVote(true);
+            }, Options.TimeBeforeModePoll.GetInt(), "AutoModePoll");
+        }
+
+        if (Options.Public.GetBool() && DisconnectManager.Rehosting)
+        {
+            AmongUsClient.Instance.ChangeGamePublic(true);
+            DisconnectManager.Rehosting = false;
+        }
+    }
+}
+
+[HarmonyPatch(typeof(AmongUsClient), nameof(AmongUsClient.OnPlayerJoined))]
+class OnPlayerJoinedPatch
+{
+    public static int JoinNum;
+    public static bool HasInvalidFriendCode(string friendcode)
+    {
+        if (string.IsNullOrEmpty(friendcode))
+        {
+            return true;
+        }
+
+        if (friendcode.Count(c => c == '#') != 1)
+        {
+            return true;
+        }
+
+        string pattern = @"[\W\d]";
+        if (Regex.IsMatch(friendcode[..friendcode.IndexOf("#")], pattern))
+        {
+            return true;
+        }
+
+        return false;
+    }
+    static void Postfix([HarmonyArgument(0)] ClientData Client)
+    {
+        Logger.Info($" {Client.PlayerName} / {Client.FriendCode} / {Client.PlatformData.Platform}", "Joined The Game");
+
+        if (AmongUsClient.Instance.AmHost)
+        {
+            BanManager.CheckBanPlayer(Client);
+            BanManager.IsPlayerInDenyName(Client, Client.PlayerName);
+            Logger.Info($" {Client.PlayerName} has access level {Utils.CheckAccessLevel(Client.FriendCode)}", "AccessCheck");
+
+            if (HasInvalidFriendCode(Client.FriendCode) && Options.KickInvalidFriendCodes.GetBool())
+            {
+                if (!Options.TempBanInvalidFriendCodes.GetBool())
+                {
+                    AmongUsClient.Instance.KickPlayer(Client.Id, false);
+                    Logger.Info(Translator.Get("invalidFriendCodeKick", Client.PlayerName), "KickInvalidFriendCode");
+                    Logger.SendInGame(Translator.Get("invalidFriendCodeKick", Client.PlayerName));
+                }
+                else
+                {
+                    AmongUsClient.Instance.KickPlayer(Client.Id, true);
+                    Logger.Info(Translator.Get("invalidFriendCodeBan", Client.PlayerName), "BanInvalidFriendCode");
+                    Logger.SendInGame(Translator.Get("invalidFriendCodeBan", Client.PlayerName));
+                }
+            }
+
+            if (Options.EnableJoinMessages.GetBool())
+            {
+                JoinNum++;
+                
+                BanManager.LoadTemplates();
+                BanManager.Templates.TryGetValue("welcome", out string msg);
+
+                if (JoinNum >= Options.MessagePerPlayerNum.GetInt())
+                {
+                    JoinNum = 0;
+                    Utils.ModeratorChatCommand(BanManager.CheckTemplate(msg), "", false);
+                }
+            }
+        }
+    }
+}
+
+[HarmonyPatch(typeof(AmongUsClient), nameof(AmongUsClient.OnPlayerLeft))]
+class OnPlayerLeftPatch
+{
+    static void Postfix([HarmonyArgument(0)] ClientData client)
+    {
+        if (!AmongUsClient.Instance.AmHost) return;
+        Logger.Info($" {client.PlayerName} left the game", "OnPlayerLeft");
+
+        if (!Utils.InGame) return;
+        PlayerControlCompleteTaskPatch.CalculateTaskWin();
+    }
+}
+
+[HarmonyPatch(typeof(PlayerControl), nameof(PlayerControl.SetLevel))]
+public static class SetLevelPatch
+{
+    public static List<PlayerControl> HandledLevelKicks = [];
+    public static void Prefix(PlayerControl __instance, uint level)
+    {
+        if (AmongUsClient.Instance.AmHost && level < Options.KickLowLevelPlayer.GetInt() - 1 && __instance.Data.ClientId != AmongUsClient.Instance.HostId && Options.EnableKickLowLevelPlayer.GetBool())
+        {
+            if (level == 0 && Options.DontKickLevelOnes.GetBool()) return;
+            if (HandledLevelKicks.Contains(__instance)) return;
+
+            if (!Options.TempBanLowLevelPlayer.GetBool() && Utils.CheckAccessLevel(__instance.Data.FriendCode) < 1) 
+            {
+                AmongUsClient.Instance.KickPlayer(__instance.Data.ClientId, false);
+                Logger.Info($" {__instance.Data.PlayerName} (level {level + 1}) was kicked for being under level {Options.KickLowLevelPlayer.GetInt()}", "KickLowLevelPlayer");
+                Logger.SendInGame($" {__instance.Data.PlayerName} (level {level + 1}) was kicked for being under level {Options.KickLowLevelPlayer.GetInt()}");
+            }
+            else if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < 1)
+            {
+                AmongUsClient.Instance.KickPlayer(__instance.Data.ClientId, true);
+                Logger.Info($" {__instance.Data.PlayerName} (level {level + 1}) was banned for being under level {Options.KickLowLevelPlayer.GetInt()} ", "BanLowLevelPlayer");
+                Logger.SendInGame($" {__instance.Data.PlayerName} (level {level + 1}) was banned for being under level {Options.KickLowLevelPlayer.GetInt()}");
+            }
+            HandledLevelKicks.Add(__instance);
+        }
+
+        if (AmongUsClient.Instance.AmHost && level > Options.KickHighLevelPlayer.GetInt() - 1 && __instance.Data.ClientId != AmongUsClient.Instance.HostId && Options.EnableKickHighLevelPlayer.GetBool())
+        {
+            if (HandledLevelKicks.Contains(__instance)) return;
+
+            if (!Options.TempBanHighLevelPlayer.GetBool() && Utils.CheckAccessLevel(__instance.Data.FriendCode) < 1) 
+            {
+                AmongUsClient.Instance.KickPlayer(__instance.Data.ClientId, false);
+                Logger.Info($" {__instance.Data.PlayerName} (level {level + 1}) was kicked for being above level {Options.KickHighLevelPlayer.GetInt()}", "KickHighLevelPlayer");
+                Logger.SendInGame($" {__instance.Data.PlayerName} (level {level + 1}) was kicked for being above level {Options.KickHighLevelPlayer.GetInt()}");
+            }
+            else if (Utils.CheckAccessLevel(__instance.Data.FriendCode) < 1)
+            {
+                AmongUsClient.Instance.KickPlayer(__instance.Data.ClientId, true);
+                Logger.Info($" {__instance.Data.PlayerName} (level {level + 1}) was banned for being above level {Options.KickHighLevelPlayer.GetInt()} ", "BanHighLevelPlayer");
+                Logger.SendInGame($" {__instance.Data.PlayerName} (level {level + 1}) was banned for being above level {Options.KickHighLevelPlayer.GetInt()}");
+            }
+            HandledLevelKicks.Add(__instance);
+        }
+/*
+        int access = Utils.CheckAccessLevel(__instance.Data.FriendCode);
+        string color = access switch
+        {
+            1 => "yellow",
+            2 => "purple",
+            3 => "red",
+            _ => "white"
+        };
+
+        if (Main.DisableLobbyInfo.Value)
+        {
+            __instance.cosmetics.nameText.text = $"<color={color}>{__instance.Data.PlayerName}</color>";
+        }
+        else
+        {
+            __instance.cosmetics.nameText.text = $"<size=70%><color=#00ffff>Lv.{level}</color> | <color=yellow>{AmongUsClient.Instance.GetClientFromCharacter(__instance).PlatformData.Platform}</size>\n<color={color}>{__instance.Data.PlayerName}</color>";
+        }*/
+    }
+}
+
+[HarmonyPatch(typeof(GameStartManager), nameof(GameStartManager.Start))]
+public static class ShowLobbyTimer_GameStartManager_Start_Postfix
+{
+    public static void Postfix(GameStartManager __instance)
+    {
+        if (__instance == null || !GameData.Instance || !AmongUsClient.Instance || AmongUsClient.Instance.NetworkMode == NetworkModes.LocalGame || !AmongUsClient.Instance.AmHost) return;
+
+        // Toes who nose
+        //Main.NormalOptions.MaxPlayers = 100;
+        //OptionManager.SyncGameOptions();
+        HudManager.Instance.ShowLobbyTimer(600);
+    }
+}
+
+[HarmonyPatch(typeof(GameData), nameof(GameData.ShowNotification))]
+public static class ShowNotificationPatch
+{
+	static bool Prefix(string playerName, DisconnectReasons reason)
+	{
+        switch (reason)
+        {
+            case DisconnectReasons.ExitGame:
+                Logger.Info($" {playerName} left the game. ({reason})", "ShowNotificationPatch");
+                Logger.SendInGame($" {playerName} left the game. ({reason})");
+				return false;            
+
+            case DisconnectReasons.Sanctions:
+            case DisconnectReasons.Hacking:
+            case DisconnectReasons.Banned:
+                Logger.Info($" {playerName} was banned from the game. ({reason})", "ShowNotificationPatch");
+                Logger.SendInGame($" {playerName} was banned from the game. ({reason})");
+				return false;
+
+            case DisconnectReasons.DuplicateConnectionDetected:
+            case DisconnectReasons.ClientTimeout:
+            case DisconnectReasons.Kicked:
+                Logger.Info($" {playerName} was kicked from the game. ({reason})", "ShowNotificationPatch");
+                Logger.SendInGame($" {playerName} was kicked from the game. ({reason})");
+				return false;
+
+            default:
+                Logger.Info($" {playerName} disconnected from the game. ({reason})", "ShowNotificationPatch");
+                return true;
+        }
+    }
+}
